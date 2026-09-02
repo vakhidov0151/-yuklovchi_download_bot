@@ -1,0 +1,9 @@
+aiogram>=3.17.0
+yt-dlp>=2025.1.0
+google-genai>=0.4.0
+python-dotenv>=1.0.0
+pillow>=11.0.0
+pdf2docx>=0.5.8
+pdfplumber>=0.11.0
+pandas>=2.2.0
+openpyxl>=3.1.5
