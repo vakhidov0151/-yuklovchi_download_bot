@@ -8,6 +8,11 @@ def _get_info_sync(url: str):
         'noplaylist': True,
         'socket_timeout': 15,
     }
+    if os.path.exists('cookies.txt'):
+        ydl_opts['cookiefile'] = 'cookies.txt'
+    elif os.path.exists('/app/data/cookies.txt'):
+        ydl_opts['cookiefile'] = '/app/data/cookies.txt'
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
@@ -31,6 +36,11 @@ def _download_media_sync(url: str, media_type: str, quality: str = None, output_
         'format_sort': ['vcodec:h264', 'acodec:m4a', 'res'], # Qora ekran muammosini hal qilish uchun eng universal Codec'larni tanlash
     }
     
+    if os.path.exists('cookies.txt'):
+        ydl_opts['cookiefile'] = 'cookies.txt'
+    elif os.path.exists('/app/data/cookies.txt'):
+        ydl_opts['cookiefile'] = '/app/data/cookies.txt'
+        
     if os.path.exists('./ffmpeg.exe'):
         ydl_opts['ffmpeg_location'] = './ffmpeg.exe'
     
@@ -59,7 +69,8 @@ def _download_media_sync(url: str, media_type: str, quality: str = None, output_
                     filename = base + ext
                     break
                     
-        return filename, info.get('title', 'Media')
+        title = info.get('title', 'video')
+        return filename, title
 
-async def download_media(url: str, media_type: str = 'video', quality: str = None):
-    return await asyncio.to_thread(_download_media_sync, url, media_type, quality)
+async def download_media(url: str, media_type: str, quality: str = None, output_path: str = "downloads"):
+    return await asyncio.to_thread(_download_media_sync, url, media_type, quality, output_path)
