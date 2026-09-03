@@ -20,15 +20,52 @@ async def convert_pdf_to_docx(pdf_path, docx_path):
     return docx_path
 
 async def convert_docx_to_pdf(docx_path, pdf_path):
-    if not HAS_D2P:
-        raise Exception("Ushbu serverda Word'dan PDF'ga o'girish imkoni yo'q (Faqat Windows'da ishlaydi).")
+    import shutil
+    import subprocess
+    
+    if shutil.which("libreoffice"):
+        def _convert_libre():
+            abs_in = os.path.abspath(docx_path)
+            out_dir = os.path.dirname(os.path.abspath(pdf_path))
+            subprocess.run(["libreoffice", "--headless", "--convert-to", "pdf", abs_in, "--outdir", out_dir], check=True)
+            base_name = os.path.splitext(os.path.basename(abs_in))[0] + ".pdf"
+            gen_pdf = os.path.join(out_dir, base_name)
+            if os.path.exists(gen_pdf) and gen_pdf != os.path.abspath(pdf_path):
+                os.replace(gen_pdf, pdf_path)
+        await asyncio.to_thread(_convert_libre)
+        return pdf_path
+
+    if HAS_D2P:
+        try:
+            def _convert_win():
+                abs_in = os.path.abspath(docx_path)
+                abs_out = os.path.abspath(pdf_path)
+                d2p(abs_in, abs_out)
+            await asyncio.to_thread(_convert_win)
+            return pdf_path
+        except Exception:
+            pass
+
+    # Universal Python fallback (Linux/Railway da Word bo'lmaganda ham ishlaydi)
+    def _convert_fallback():
+        import docx
+        from fpdf import FPDF
         
-    def _convert():
-        # docx2pdf uchun absolyut yo'llar tavsiya etiladi
-        abs_in = os.path.abspath(docx_path)
-        abs_out = os.path.abspath(pdf_path)
-        d2p(abs_in, abs_out)
-    await asyncio.to_thread(_convert)
+        doc = docx.Document(docx_path)
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        pdf.set_font("Helvetica", size=11)
+        
+        for p in doc.paragraphs:
+            text = p.text.strip()
+            if text:
+                clean = text.encode('latin-1', 'replace').decode('latin-1')
+                pdf.multi_cell(0, 6, clean)
+                pdf.ln(2)
+        pdf.output(pdf_path)
+        
+    await asyncio.to_thread(_convert_fallback)
     return pdf_path
 
 async def convert_pdf_to_xlsx(pdf_path, xlsx_path):
@@ -40,7 +77,6 @@ async def convert_pdf_to_xlsx(pdf_path, xlsx_path):
                 for table in tables:
                     if table:
                         all_tables.extend(table)
-                        # Bo'sh qator qo'shish
                         all_tables.append([""] * len(table[0]))
             
             if not all_tables:
