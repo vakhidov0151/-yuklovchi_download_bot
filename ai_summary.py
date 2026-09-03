@@ -4,6 +4,27 @@ import time
 from google import genai
 from config import GEMINI_API_KEY
 
+def get_mime_type(file_path: str) -> str:
+    ext = os.path.splitext(file_path)[1].lower()
+    mapping = {
+        '.mp3': 'audio/mp3',
+        '.m4a': 'audio/mp4',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.opus': 'audio/opus',
+        '.aac': 'audio/aac',
+        '.mp4': 'video/mp4',
+        '.mkv': 'video/x-matroska',
+        '.webm': 'video/webm',
+        '.mov': 'video/quicktime',
+        '.avi': 'video/x-msvideo',
+        '.pdf': 'application/pdf',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png'
+    }
+    return mapping.get(ext, 'audio/mp4')
+
 async def summarize_media(file_path: str, prompt: str) -> str:
     """
     Uploads a media file (audio/video) to Gemini File API using the new SDK,
@@ -12,8 +33,13 @@ async def summarize_media(file_path: str, prompt: str) -> str:
     def _process():
         client = genai.Client(api_key=GEMINI_API_KEY)
         
-        # Upload the file
-        uploaded_file = client.files.upload(file=file_path)
+        mime_type = get_mime_type(file_path)
+        
+        # Upload the file with explicit mime_type
+        uploaded_file = client.files.upload(
+            file=file_path,
+            config={'mime_type': mime_type}
+        )
         
         # Wait for the file to be processed
         while uploaded_file.state == 'PROCESSING':
