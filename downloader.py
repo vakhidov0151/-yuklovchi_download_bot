@@ -37,7 +37,7 @@ def _get_info_sync(url: str):
 async def get_video_info(url: str):
     return await asyncio.to_thread(_get_info_sync, url)
 
-def _download_media_sync(url: str, media_type: str, quality: str = None, output_path: str = "downloads"):
+def _download_media_sync(url: str, media_type: str = 'video', quality: str = None, output_path: str = "downloads"):
     os.makedirs(output_path, exist_ok=True)
     clean_url = re.sub(r'\?.*$', '', url) if ('instagram.com' in url or 'tiktok.com' in url) else url
     
@@ -70,9 +70,11 @@ def _download_media_sync(url: str, media_type: str, quality: str = None, output_
     if media_type == 'audio':
         ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio/best'
     else:
-        ydl_opts['merge_output_format'] = 'mp4'
-        ydl_opts['format_sort'] = ['vcodec:h264', 'acodec:m4a', 'res']
-        if quality:
+        if 'instagram.com' in url or 'tiktok.com' in url:
+            ydl_opts['format'] = 'best[ext=mp4]/best'
+        elif quality:
+            ydl_opts['merge_output_format'] = 'mp4'
+            ydl_opts['format_sort'] = ['vcodec:h264', 'acodec:m4a', 'res']
             ydl_opts['format'] = (
                 f'bestvideo[height<={quality}]+bestaudio/'
                 f'best[height<={quality}]/'
@@ -81,7 +83,7 @@ def _download_media_sync(url: str, media_type: str, quality: str = None, output_
                 f'best'
             )
         else:
-            ydl_opts['format'] = 'best'
+            ydl_opts['format'] = 'best[ext=mp4]/best'
             
     info = None
     filename = None
