@@ -809,10 +809,10 @@ async def handle_message(message: types.Message):
         wait_msg = await message.answer(_(lang, 'wait_video'))
         
         try:
-            # Kutish vaqtini qat'iy 15 soniya qilib belgilaymiz
-            info = await asyncio.wait_for(get_video_info(text), timeout=15.0)
+            # Serverlarda Instagram/YouTube tahlili 15-30 soniya olishi mumkin
+            info = await asyncio.wait_for(get_video_info(text), timeout=45.0)
         except asyncio.TimeoutError:
-            await wait_msg.edit_text("❌ Tarmoq xatosi: Qidiruv vaqti tugadi (Timeout). Iltimos, VPN tekshirib qayta urinib ko'ring.")
+            await wait_msg.edit_text("❌ Tarmoq xatosi: Qidiruv vaqti tugadi. Server biroz band, iltimos qayta urinib ko'ring.")
             return
         except Exception as e:
             await wait_msg.edit_text(f"❌ Xatolik: {e}")

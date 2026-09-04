@@ -8,12 +8,7 @@ def _get_info_sync(url: str):
     ydl_opts = {
         'quiet': True,
         'noplaylist': True,
-        'socket_timeout': 20,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'ios', 'web']
-            }
-        },
+        'socket_timeout': 30,
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
@@ -51,11 +46,6 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
         'quiet': True,
         'noplaylist': True,
         'socket_timeout': 60,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'ios', 'web']
-            }
-        },
         'http_headers': headers
     }
     
@@ -83,7 +73,8 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
                 f'best'
             )
         else:
-            ydl_opts['format'] = 'best[ext=mp4]/best'
+            ydl_opts['merge_output_format'] = 'mp4'
+            ydl_opts['format'] = 'bestvideo+bestaudio/best'
             
     info = None
     filename = None
