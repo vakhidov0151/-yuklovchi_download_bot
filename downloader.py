@@ -1,12 +1,23 @@
 import asyncio
 import os
+import re
 import yt_dlp
 
 def _get_info_sync(url: str):
+    clean_url = re.sub(r'\?.*$', '', url) if ('instagram.com' in url or 'tiktok.com' in url) else url
     ydl_opts = {
         'quiet': True,
         'noplaylist': True,
-        'socket_timeout': 15,
+        'socket_timeout': 20,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web']
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
     }
     if os.path.exists('cookies.txt'):
         ydl_opts['cookiefile'] = 'cookies.txt'
@@ -15,23 +26,37 @@ def _get_info_sync(url: str):
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            info = ydl.extract_info(url, download=False)
-            return info
-        except Exception as e:
-            print(f"Error getting info: {e}")
-            return None
+            return ydl.extract_info(url, download=False)
+        except Exception:
+            try:
+                return ydl.extract_info(clean_url, download=False)
+            except Exception as e:
+                print(f"Error getting info: {e}")
+                return None
 
 async def get_video_info(url: str):
     return await asyncio.to_thread(_get_info_sync, url)
 
 def _download_media_sync(url: str, media_type: str, quality: str = None, output_path: str = "downloads"):
     os.makedirs(output_path, exist_ok=True)
+    clean_url = re.sub(r'\?.*$', '', url) if ('instagram.com' in url or 'tiktok.com' in url) else url
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
     
     ydl_opts = {
         'outtmpl': f'{output_path}/%(id)s.%(ext)s',
         'quiet': True,
         'noplaylist': True,
         'socket_timeout': 60,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web']
+            }
+        },
+        'http_headers': headers
     }
     
     if os.path.exists('cookies.txt'):
@@ -48,7 +73,6 @@ def _download_media_sync(url: str, media_type: str, quality: str = None, output_
         ydl_opts['merge_output_format'] = 'mp4'
         ydl_opts['format_sort'] = ['vcodec:h264', 'acodec:m4a', 'res']
         if quality:
-            # Vertikal (Shorts/Reels) va gorizontal videolarni to'g'ri tanlash
             ydl_opts['format'] = (
                 f'bestvideo[height<={quality}]+bestaudio/'
                 f'best[height<={quality}]/'
@@ -63,7 +87,10 @@ def _download_media_sync(url: str, media_type: str, quality: str = None, output_
     filename = None
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            try:
+                info = ydl.extract_info(url, download=True)
+            except Exception:
+                info = ydl.extract_info(clean_url, download=True)
             filename = ydl.prepare_filename(info)
     except Exception as e:
         print(f"Primary download attempt failed: {e}. Trying fallback...")
@@ -72,7 +99,13 @@ def _download_media_sync(url: str, media_type: str, quality: str = None, output_
             'quiet': True,
             'noplaylist': True,
             'socket_timeout': 60,
-            'format': 'best'
+            'format': 'best',
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'web']
+                }
+            },
+            'http_headers': headers
         }
         if os.path.exists('cookies.txt'):
             fallback_opts['cookiefile'] = 'cookies.txt'
@@ -80,10 +113,13 @@ def _download_media_sync(url: str, media_type: str, quality: str = None, output_
             fallback_opts['cookiefile'] = '/app/data/cookies.txt'
             
         with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            try:
+                info = ydl.extract_info(url, download=True)
+            except Exception:
+                info = ydl.extract_info(clean_url, download=True)
             filename = ydl.prepare_filename(info)
 
-    # Fayl nomini aniqlash
+    # Faylni topish
     if not os.path.exists(filename):
         base, _ = os.path.splitext(filename)
         for ext in ['.mp4', '.mkv', '.webm', '.m4a', '.mp3', '.mov']:
