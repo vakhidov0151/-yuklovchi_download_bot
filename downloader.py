@@ -92,12 +92,15 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
             filename = ydl.prepare_filename(info)
     except Exception as e:
         print(f"Primary download attempt failed: {e}. Trying fallback...")
+        primary_error = str(e)
+        
         fallback_opts = {
             'outtmpl': f'{output_path}/%(id)s.%(ext)s',
             'quiet': True,
             'noplaylist': True,
             'socket_timeout': 60,
-            'format': 'best',
+            'format': 'bestvideo+bestaudio/best',
+            'merge_output_format': 'mp4',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android', 'ios', 'web']
@@ -110,12 +113,16 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
         elif os.path.exists('/app/data/cookies.txt'):
             fallback_opts['cookiefile'] = '/app/data/cookies.txt'
             
-        with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-            try:
-                info = ydl.extract_info(url, download=True)
-            except Exception:
-                info = ydl.extract_info(clean_url, download=True)
-            filename = ydl.prepare_filename(info)
+        try:
+            with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                try:
+                    info = ydl.extract_info(url, download=True)
+                except Exception:
+                    info = ydl.extract_info(clean_url, download=True)
+                filename = ydl.prepare_filename(info)
+        except Exception as fallback_error:
+            # Asosiy xatoni qaytaramiz, chunki fallback xatosi (masalan format topilmadi) chalg'ituvchi bo'lishi mumkin
+            raise Exception(f"Yuklash imkonsiz: {primary_error}")
 
     # Faylni topish
     if not os.path.exists(filename):
