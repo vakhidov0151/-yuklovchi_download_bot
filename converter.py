@@ -46,7 +46,7 @@ async def convert_docx_to_pdf(docx_path, pdf_path):
         except Exception:
             pass
 
-    # Universal Python fallback (Linux/Railway da Word bo'lmaganda ham ishlaydi)
+    # Universal Python fallback (Linux/Railway da Word bo'lmaganda ishlaydi)
     def _convert_fallback():
         import docx
         from fpdf import FPDF
@@ -77,6 +77,7 @@ async def convert_pdf_to_xlsx(pdf_path, xlsx_path):
                 for table in tables:
                     if table:
                         all_tables.extend(table)
+                        # Bo'sh qator qo'shish
                         all_tables.append([""] * len(table[0]))
             
             if not all_tables:

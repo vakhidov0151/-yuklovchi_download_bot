@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 class Database:
     def __init__(self, db_file=None):
         if db_file is None:
+            # Railway kabi serverlar uchun doimiy xotira papkasi
             if os.path.exists('/app/data'):
                 db_file = '/app/data/database.db'
             else:
@@ -31,6 +32,7 @@ class Database:
         ''')
         self.conn.commit()
         
+        # Persistent media kesh jadvali (server qayta yonganda tugmalar ishlamay qolmasligi uchun)
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS media_cache (
                 id TEXT PRIMARY KEY,
@@ -42,6 +44,7 @@ class Database:
         ''')
         self.conn.commit()
 
+        # Migratsiya: Eski bazada language ustuni yo'q bo'lsa qo'shib qo'yamiz
         try:
             self.cursor.execute('ALTER TABLE users ADD COLUMN language TEXT DEFAULT "uz"')
             self.conn.commit()
@@ -49,6 +52,7 @@ class Database:
             pass
 
     def add_user(self, telegram_id, full_name, username, referrer_id=None):
+        """Yangi foydalanuvchini bazaga qo'shish"""
         try:
             self.cursor.execute('''
                 INSERT INTO users (telegram_id, full_name, username, join_date, referrer_id)
@@ -95,6 +99,7 @@ class Database:
         return self.cursor.fetchone()[0]
 
     def check_limit(self, telegram_id):
+        # 1. Pro bo'lsa limit yo'q
         if self.is_pro(telegram_id):
             return True
 
@@ -107,11 +112,13 @@ class Database:
         downloads_today, last_download_date = res
         today_str = datetime.now().date().isoformat()
 
+        # Agar oxirgi yuklash kecha bo'lgan bo'lsa, limitni nolga tushiramiz
         if str(last_download_date) != today_str:
             self.cursor.execute('UPDATE users SET downloads_today = 0, last_download_date = ? WHERE telegram_id = ?', (today_str, telegram_id))
             self.conn.commit()
             downloads_today = 0
 
+        # Kunlik 5 ta limit
         return (downloads_today or 0) < 5
 
     def add_download(self, telegram_id):
