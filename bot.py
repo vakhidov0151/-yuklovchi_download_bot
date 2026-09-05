@@ -806,11 +806,59 @@ async def handle_message(message: types.Message):
     lang = db.get_language(message.from_user.id)
     text = message.text
     if text.startswith("http://") or text.startswith("https://"):
+        # 1. Instagram, TikTok va YouTube Shorts bo'lsa - DARHOL YUKLAB BERAMIZ!
+        is_direct = ('instagram.com' in text) or ('tiktok.com' in text) or ('/shorts/' in text)
+        if is_direct:
+            if not db.check_limit(message.from_user.id):
+                await message.answer(_(lang, 'limit_over'))
+                return
+                
+            wait_msg = await message.answer("⏳ <i>Video yuklanmoqda... Kuting...</i>")
+            try:
+                file_path, v_title = await asyncio.wait_for(download_media(text, media_type='video'), timeout=90.0)
+                if not file_path or not os.path.exists(file_path):
+                    await wait_msg.edit_text("❌ Xatolik: Video yuklanmadi. Havolani tekshiring.")
+                    return
+                    
+                if os.path.getsize(file_path) > 49.5 * 1024 * 1024:
+                    os.remove(file_path)
+                    await wait_msg.edit_text("❌ Ushbu video hajmi 50 MB dan katta bo'lgani uchun Telegram orqali yuborib bo'lmadi.")
+                    return
+                    
+                clean_title = re.sub(r'[\\/*?:"<>|\n\r]', '', str(v_title))[:50].strip() or "video"
+                video = FSInputFile(file_path, filename=f"{clean_title}.mp4")
+                
+                video_id = str(uuid.uuid4())[:8]
+                c_item = {'url': text, 'thumbnail': None}
+                url_cache[video_id] = c_item
+                db.set_cache(video_id, c_item)
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="🎵 Musiqasi (Audio)", callback_data=f"dl_aud_{video_id}"),
+                        InlineKeyboardButton(text="🧠 AI Konspekt", callback_data=f"ai_sumurl_{video_id}")
+                    ]
+                ])
+                
+                await message.answer_video(video=video, caption=f"🎬 <b>{html.escape(str(v_title)[:100])}</b>", reply_markup=keyboard)
+                await wait_msg.delete()
+                
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                db.add_download(message.from_user.id)
+                return
+            except asyncio.TimeoutError:
+                await wait_msg.edit_text("❌ Tarmoq xatosi: Yuklab olish vaqti tugadi. Qaytadan urinib ko'ring.")
+                return
+            except Exception as e:
+                await wait_msg.edit_text(f"❌ Xatolik: {e}")
+                return
+
+        # 2. Agar uzun YouTube video bo'lsa - ma'lumotlarini olib, sifat tanlash menyusini chiqaramiz
         wait_msg = await message.answer(_(lang, 'wait_video'))
         
         try:
-            # Serverlarda Instagram/YouTube tahlili 15-30 soniya olishi mumkin
-            info = await asyncio.wait_for(get_video_info(text), timeout=45.0)
+            info = await asyncio.wait_for(get_video_info(text), timeout=30.0)
         except asyncio.TimeoutError:
             await wait_msg.edit_text("❌ Tarmoq xatosi: Qidiruv vaqti tugadi. Server biroz band, iltimos qayta urinib ko'ring.")
             return
@@ -833,43 +881,6 @@ async def handle_message(message: types.Message):
         }
         url_cache[video_id] = c_item
         db.set_cache(video_id, c_item)
-        
-        # Instagram, TikTok va YouTube Shorts bo'lsa darhol videoni yuklab beramiz
-        is_direct = ('instagram.com' in text) or ('tiktok.com' in text) or ('/shorts/' in text)
-        if is_direct:
-            if not db.check_limit(message.from_user.id):
-                await wait_msg.edit_text(_(lang, 'limit_over'))
-                return
-                
-            await wait_msg.edit_text(_(lang, 'downloading'))
-            try:
-                file_path, v_title = await asyncio.wait_for(download_media(text, media_type='video'), timeout=180.0)
-                if os.path.getsize(file_path) > 49.5 * 1024 * 1024:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                    await wait_msg.edit_text("❌ Ushbu video hajmi 50 MB dan katta bo'lgani uchun Telegram orqali yuborib bo'lmadi.")
-                    return
-                    
-                clean_title = re.sub(r'[\\/*?:"<>|\n\r]', '', str(v_title))[:50].strip() or "video"
-                video = FSInputFile(file_path, filename=f"{clean_title}.mp4")
-                
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [
-                        InlineKeyboardButton(text="🎵 Musiqasi (Audio)", callback_data=f"dl_aud_{video_id}"),
-                        InlineKeyboardButton(text="🧠 AI Konspekt", callback_data=f"ai_sumurl_{video_id}")
-                    ]
-                ])
-                
-                await message.answer_video(video=video, caption=f"🎬 <b>{html.escape(str(v_title)[:100])}</b>", reply_markup=keyboard)
-                await wait_msg.delete()
-                
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                db.add_download(message.from_user.id)
-                return
-            except Exception as e:
-                logging.error(f"Direct download error: {e}")
-                # Agar to'g'ridan-to'g'ri yuklashda xatolik bo'lsa, quyidagi menyuni chiqaramiz
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
