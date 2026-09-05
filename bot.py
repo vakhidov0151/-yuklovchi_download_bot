@@ -133,7 +133,8 @@ async def cmd_start(message: types.Message):
         await message.answer(_('uz', 'choose_lang'), reply_markup=get_lang_keyboard())
     else:
         lang = db.get_language(message.from_user.id)
-        await message.answer(_(lang, 'start', name=message.from_user.first_name))
+        safe_name = html.escape(message.from_user.first_name)
+        await message.answer(_(lang, 'start', name=safe_name))
 
 @dp.message(Command("lang"))
 async def cmd_lang(message: types.Message):
@@ -144,7 +145,8 @@ async def process_lang(callback_query: types.CallbackQuery):
     lang_code = callback_query.data.split('_')[1]
     db.set_language(callback_query.from_user.id, lang_code)
     await callback_query.answer(_(lang_code, 'lang_changed'))
-    await callback_query.message.edit_text(_(lang_code, 'start', name=callback_query.from_user.first_name))
+    safe_name = html.escape(callback_query.from_user.first_name)
+    await callback_query.message.edit_text(_(lang_code, 'start', name=safe_name))
 
 @dp.message(Command("stat"))
 async def cmd_stat(message: types.Message):
@@ -803,115 +805,118 @@ async def send_broadcast(message: types.Message, state: FSMContext):
 
 @dp.message()
 async def handle_message(message: types.Message):
-    lang = db.get_language(message.from_user.id)
-    text = message.text
-    
-    if not text:
-        return
+    try:
+        lang = db.get_language(message.from_user.id)
+        text = message.text
         
-    text = text.strip()
-    if text.startswith("http://") or text.startswith("https://"):
-        # 1. Instagram, TikTok va YouTube Shorts bo'lsa - DARHOL YUKLAB BERAMIZ!
-        is_direct = ('instagram.com' in text) or ('tiktok.com' in text) or ('/shorts/' in text)
-        if is_direct:
-            if not db.check_limit(message.from_user.id):
-                await message.answer(_(lang, 'limit_over'))
-                return
-                
-            wait_msg = await message.answer("⏳ <i>Video yuklanmoqda... Kuting...</i>")
+        if not text:
+            return
+            
+        text = text.strip()
+        if text.startswith("http://") or text.startswith("https://"):
+            # 1. Instagram, TikTok va YouTube Shorts bo'lsa - DARHOL YUKLAB BERAMIZ!
+            is_direct = ('instagram.com' in text) or ('tiktok.com' in text) or ('/shorts/' in text)
+            if is_direct:
+                if not db.check_limit(message.from_user.id):
+                    await message.answer(_(lang, 'limit_over'))
+                    return
+                    
+                wait_msg = await message.answer("⏳ <i>Video yuklanmoqda... Kuting...</i>")
+                try:
+                    file_path, v_title = await asyncio.wait_for(download_media(text, media_type='video'), timeout=90.0)
+                    if not file_path or not os.path.exists(file_path):
+                        await wait_msg.edit_text("❌ Xatolik: Video yuklanmadi. Havolani tekshiring.")
+                        return
+                        
+                    if os.path.getsize(file_path) > 49.5 * 1024 * 1024:
+                        os.remove(file_path)
+                        await wait_msg.edit_text("❌ Ushbu video hajmi 50 MB dan katta bo'lgani uchun Telegram orqali yuborib bo'lmadi.")
+                        return
+                        
+                    clean_title = re.sub(r'[\\/*?:"<>|\n\r]', '', str(v_title))[:50].strip() or "video"
+                    video = FSInputFile(file_path, filename=f"{clean_title}.mp4")
+                    
+                    video_id = str(uuid.uuid4())[:8]
+                    c_item = {'url': text, 'thumbnail': None}
+                    url_cache[video_id] = c_item
+                    db.set_cache(video_id, c_item)
+                    
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            InlineKeyboardButton(text="🎵 Musiqasi (Audio)", callback_data=f"dl_aud_{video_id}"),
+                            InlineKeyboardButton(text="🧠 AI Konspekt", callback_data=f"ai_sumurl_{video_id}")
+                        ]
+                    ])
+                    
+                    await message.answer_video(video=video, caption=f"🎬 <b>{html.escape(str(v_title)[:100])}</b>", reply_markup=keyboard)
+                    await wait_msg.delete()
+                    
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                    db.add_download(message.from_user.id)
+                    return
+                except asyncio.TimeoutError:
+                    await wait_msg.edit_text("❌ Tarmoq xatosi: Yuklab olish vaqti tugadi. Qaytadan urinib ko'ring.")
+                    return
+                except Exception as e:
+                    await wait_msg.edit_text(f"❌ Xatolik: {e}")
+                    return
+
+            # 2. Agar uzun YouTube video bo'lsa - ma'lumotlarini olib, sifat tanlash menyusini chiqaramiz
+            wait_msg = await message.answer(_(lang, 'wait_video'))
+            
             try:
-                file_path, v_title = await asyncio.wait_for(download_media(text, media_type='video'), timeout=90.0)
-                if not file_path or not os.path.exists(file_path):
-                    await wait_msg.edit_text("❌ Xatolik: Video yuklanmadi. Havolani tekshiring.")
-                    return
-                    
-                if os.path.getsize(file_path) > 49.5 * 1024 * 1024:
-                    os.remove(file_path)
-                    await wait_msg.edit_text("❌ Ushbu video hajmi 50 MB dan katta bo'lgani uchun Telegram orqali yuborib bo'lmadi.")
-                    return
-                    
-                clean_title = re.sub(r'[\\/*?:"<>|\n\r]', '', str(v_title))[:50].strip() or "video"
-                video = FSInputFile(file_path, filename=f"{clean_title}.mp4")
-                
-                video_id = str(uuid.uuid4())[:8]
-                c_item = {'url': text, 'thumbnail': None}
-                url_cache[video_id] = c_item
-                db.set_cache(video_id, c_item)
-                
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [
-                        InlineKeyboardButton(text="🎵 Musiqasi (Audio)", callback_data=f"dl_aud_{video_id}"),
-                        InlineKeyboardButton(text="🧠 AI Konspekt", callback_data=f"ai_sumurl_{video_id}")
-                    ]
-                ])
-                
-                await message.answer_video(video=video, caption=f"🎬 <b>{html.escape(str(v_title)[:100])}</b>", reply_markup=keyboard)
-                await wait_msg.delete()
-                
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                db.add_download(message.from_user.id)
-                return
+                info = await asyncio.wait_for(get_video_info(text), timeout=30.0)
             except asyncio.TimeoutError:
-                await wait_msg.edit_text("❌ Tarmoq xatosi: Yuklab olish vaqti tugadi. Qaytadan urinib ko'ring.")
+                await wait_msg.edit_text("❌ Tarmoq xatosi: Qidiruv vaqti tugadi. Server biroz band, iltimos qayta urinib ko'ring.")
                 return
             except Exception as e:
                 await wait_msg.edit_text(f"❌ Xatolik: {e}")
                 return
+                
+            if not info:
+                await wait_msg.edit_text(_(lang, 'not_found'))
+                return
 
-        # 2. Agar uzun YouTube video bo'lsa - ma'lumotlarini olib, sifat tanlash menyusini chiqaramiz
-        wait_msg = await message.answer(_(lang, 'wait_video'))
-        
-        try:
-            info = await asyncio.wait_for(get_video_info(text), timeout=30.0)
-        except asyncio.TimeoutError:
-            await wait_msg.edit_text("❌ Tarmoq xatosi: Qidiruv vaqti tugadi. Server biroz band, iltimos qayta urinib ko'ring.")
-            return
-        except Exception as e:
-            await wait_msg.edit_text(f"❌ Xatolik: {e}")
-            return
+            title = info.get('title', 'Video')
+            duration = info.get('duration', 0)
+            extractor = info.get('extractor', 'Unknown')
             
-        if not info:
-            await wait_msg.edit_text(_(lang, 'not_found'))
-            return
-
-        title = info.get('title', 'Video')
-        duration = info.get('duration', 0)
-        extractor = info.get('extractor', 'Unknown')
-        
-        video_id = str(uuid.uuid4())[:8]
-        c_item = {
-            'url': text,
-            'thumbnail': info.get('thumbnail')
-        }
-        url_cache[video_id] = c_item
-        db.set_cache(video_id, c_item)
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text=_(lang, 'ai_summary_btn_audio'), callback_data=f"ai_sumurl_{video_id}")
-            ],
-            [
-                InlineKeyboardButton(text="⬇️ 1080p", callback_data=f"dl_vid_{video_id}_1080"),
-                InlineKeyboardButton(text="⬇️ 720p", callback_data=f"dl_vid_{video_id}_720")
-            ],
-            [
-                InlineKeyboardButton(text="⬇️ 480p", callback_data=f"dl_vid_{video_id}_480"),
-                InlineKeyboardButton(text="⬇️ 360p", callback_data=f"dl_vid_{video_id}_360")
-            ],
-            [
-                InlineKeyboardButton(text="🎵 Audio", callback_data=f"dl_aud_{video_id}"),
-                InlineKeyboardButton(text="🖼 Thumbnail", callback_data=f"dl_pic_{video_id}")
-            ]
-        ])
-        
-        mins, secs = divmod(duration or 0, 60)
-        time_str = f"{mins}:{secs:02d}"
-        
-        await wait_msg.edit_text(_(lang, 'video_caption', title=title, ext=extractor, time=time_str), reply_markup=keyboard)
-    else:
-         await message.answer(_(lang, 'send_only_link'))
-
+            video_id = str(uuid.uuid4())[:8]
+            c_item = {
+                'url': text,
+                'thumbnail': info.get('thumbnail')
+            }
+            url_cache[video_id] = c_item
+            db.set_cache(video_id, c_item)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=_(lang, 'ai_summary_btn_audio'), callback_data=f"ai_sumurl_{video_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="⬇️ 1080p", callback_data=f"dl_vid_{video_id}_1080"),
+                    InlineKeyboardButton(text="⬇️ 720p", callback_data=f"dl_vid_{video_id}_720")
+                ],
+                [
+                    InlineKeyboardButton(text="⬇️ 480p", callback_data=f"dl_vid_{video_id}_480"),
+                    InlineKeyboardButton(text="⬇️ 360p", callback_data=f"dl_vid_{video_id}_360")
+                ],
+                [
+                    InlineKeyboardButton(text="🎵 Audio", callback_data=f"dl_aud_{video_id}"),
+                    InlineKeyboardButton(text="🖼 Thumbnail", callback_data=f"dl_pic_{video_id}")
+                ]
+            ])
+            
+            mins, secs = divmod(duration or 0, 60)
+            time_str = f"{mins}:{secs:02d}"
+            
+            await wait_msg.edit_text(_(lang, 'video_caption', title=title, ext=extractor, time=time_str), reply_markup=keyboard)
+        else:
+             await message.answer(_(lang, 'send_only_link'))
+             
+    except Exception as e:
+        await message.answer(f"⚠️ Kritik xatolik yuz berdi:\n<code>{str(e)}</code>")
 
 async def main():
     await dp.start_polling(bot)
