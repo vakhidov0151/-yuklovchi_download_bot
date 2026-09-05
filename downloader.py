@@ -65,7 +65,8 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
             'threads.net', 'facebook.com', 'fb.watch', 'pinterest.com', 'pin.it'
         ]
         if any(domain in url.lower() for domain in direct_domains):
-            ydl_opts['format'] = 'best[ext=mp4]/best'
+            ydl_opts['format'] = 'bestvideo+bestaudio/best'
+            ydl_opts['merge_output_format'] = 'mp4'
         elif quality:
             ydl_opts['merge_output_format'] = 'mp4'
             ydl_opts['format_sort'] = ['vcodec:h264', 'acodec:m4a', 'res']
