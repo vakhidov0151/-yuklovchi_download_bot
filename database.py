@@ -46,6 +46,10 @@ class Database:
 
         # Migratsiya: Eski bazada ustunlar yo'q bo'lsa qo'shib qo'yamiz
         columns_to_check = {
+            'full_name': 'TEXT',
+            'username': 'TEXT',
+            'join_date': 'TIMESTAMP',
+            'referrer_id': 'INTEGER',
             'language': 'TEXT DEFAULT "uz"',
             'downloads_today': 'INTEGER DEFAULT 0',
             'last_download_date': 'DATE',
