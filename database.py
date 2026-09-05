@@ -44,12 +44,19 @@ class Database:
         ''')
         self.conn.commit()
 
-        # Migratsiya: Eski bazada language ustuni yo'q bo'lsa qo'shib qo'yamiz
-        try:
-            self.cursor.execute('ALTER TABLE users ADD COLUMN language TEXT DEFAULT "uz"')
-            self.conn.commit()
-        except sqlite3.OperationalError:
-            pass
+        # Migratsiya: Eski bazada ustunlar yo'q bo'lsa qo'shib qo'yamiz
+        columns_to_check = {
+            'language': 'TEXT DEFAULT "uz"',
+            'downloads_today': 'INTEGER DEFAULT 0',
+            'last_download_date': 'DATE',
+            'pro_until': 'TIMESTAMP'
+        }
+        for col, col_type in columns_to_check.items():
+            try:
+                self.cursor.execute(f'ALTER TABLE users ADD COLUMN {col} {col_type}')
+                self.conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
     def add_user(self, telegram_id, full_name, username, referrer_id=None):
         """Yangi foydalanuvchini bazaga qo'shish"""

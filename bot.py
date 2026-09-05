@@ -805,6 +805,11 @@ async def send_broadcast(message: types.Message, state: FSMContext):
 async def handle_message(message: types.Message):
     lang = db.get_language(message.from_user.id)
     text = message.text
+    
+    if not text:
+        return
+        
+    text = text.strip()
     if text.startswith("http://") or text.startswith("https://"):
         # 1. Instagram, TikTok va YouTube Shorts bo'lsa - DARHOL YUKLAB BERAMIZ!
         is_direct = ('instagram.com' in text) or ('tiktok.com' in text) or ('/shorts/' in text)
