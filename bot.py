@@ -164,8 +164,9 @@ async def cmd_profile(message: types.Message):
     bot_info = await bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
     
-    user_data = db.get_user(user_id)
-    downloads_today = user_data[6] if user_data else 0
+    db.cursor.execute('SELECT downloads_today FROM users WHERE telegram_id = ?', (user_id,))
+    res = db.cursor.fetchone()
+    downloads_today = res[0] if res and res[0] else 0
     
     if lang == 'uz':
         status = "💎 PRO (Cheksiz)" if is_pro else "🆓 FREE"
@@ -178,6 +179,12 @@ async def cmd_profile(message: types.Message):
         limits = "Unlimited" if is_pro else f"{5 - downloads_today} (daily)"
     
     await message.answer(_(lang, 'profile', status=status, limits=limits, refs=ref_count, link=ref_link))
+
+@dp.message(Command("freepro"))
+async def cmd_freepro(message: types.Message):
+    # Testing uchun bepul 30 kunlik VIP beruvchi yashirin buyruq
+    db.grant_pro(message.from_user.id, 30)
+    await message.answer("🎉 Tabriklaymiz! Sizga test qilish uchun 30 kunlik PRO (VIP) taqdim etildi!\nEndi cheklovsiz yuklab olishingiz mumkin.")
 
 @dp.message(Command("vip"))
 async def cmd_vip(message: types.Message, state: FSMContext):
