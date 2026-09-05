@@ -688,8 +688,13 @@ async def process_download(callback_query: types.CallbackQuery):
         return
 
     await callback_query.answer()
-    await callback_query.message.edit_text(_(lang, 'downloading'))
     
+    # Text message bo'lsa edit qilamiz, video/rasm bo'lsa yangi xabar yozamiz
+    if callback_query.message.text:
+        wait_msg = await callback_query.message.edit_text(_(lang, 'downloading'))
+    else:
+        wait_msg = await callback_query.message.answer(_(lang, 'downloading'))
+        
     try:
         if action == "vid":
             quality = data[3]
@@ -698,7 +703,7 @@ async def process_download(callback_query: types.CallbackQuery):
             if os.path.getsize(file_path) > 49.5 * 1024 * 1024:
                 if os.path.exists(file_path):
                     os.remove(file_path)
-                await callback_query.message.edit_text("❌ Ushbu video hajmi 50 MB dan katta. Telegram botlari orqali faqat 50 MB gacha bo'lgan fayllarni yuborish mumkin.\n\nIltimos, videoning pastroq sifatini (masalan 360p yoki 480p) tanlang yoki faqat Audio sifatida yuklab oling!")
+                await wait_msg.edit_text("❌ Ushbu video hajmi 50 MB dan katta. Telegram botlari orqali faqat 50 MB gacha bo'lgan fayllarni yuborish mumkin.\n\nIltimos, videoning pastroq sifatini (masalan 360p yoki 480p) tanlang yoki faqat Audio sifatida yuklab oling!")
                 return
                 
             clean_title = re.sub(r'[\\/*?:"<>|\n\r]', '', str(title))[:50].strip() or "video"
@@ -719,7 +724,7 @@ async def process_download(callback_query: types.CallbackQuery):
             if os.path.getsize(file_path) > 49.5 * 1024 * 1024:
                 if os.path.exists(file_path):
                     os.remove(file_path)
-                await callback_query.message.edit_text("❌ Ushbu audio hajmi 50 MB dan katta bo'lgani uchun Telegram orqali yuborish imkonsiz.")
+                await wait_msg.edit_text("❌ Ushbu audio hajmi 50 MB dan katta bo'lgani uchun Telegram orqali yuborish imkonsiz.")
                 return
                 
             clean_title = re.sub(r'[\\/*?:"<>|\n\r]', '', str(title))[:50].strip() or "audio"
@@ -735,15 +740,20 @@ async def process_download(callback_query: types.CallbackQuery):
             ])
             await msg.edit_reply_markup(reply_markup=keyboard)
             
-        await callback_query.message.delete()
+        await wait_msg.delete()
+        
+        # Agar callback qilingan xabar text bo'lsa uni o'chiramiz, video bo'lsa uni o'chirmaymiz (chunki userga qolsin)
+        if callback_query.message.text:
+            await callback_query.message.delete()
+            
         if os.path.exists(file_path):
             os.remove(file_path)
         db.add_download(user_id)
         
     except asyncio.TimeoutError:
-        await callback_query.message.edit_text("❌ Xatolik: Yuklab olish vaqti tugadi (10 daqiqadan oshib ketdi). VPN tezligi pastligi sabab bo'lishi mumkin.")
+        await wait_msg.edit_text("❌ Xatolik: Yuklab olish vaqti tugadi (10 daqiqadan oshib ketdi). VPN tezligi pastligi sabab bo'lishi mumkin.")
     except Exception as e:
-        await callback_query.message.edit_text(f"❌ Error: {e}")
+        await wait_msg.edit_text(f"❌ Xatolik: {e}")
 
 @dp.message(Command("admin"))
 async def admin_panel(message: types.Message, state: FSMContext):
