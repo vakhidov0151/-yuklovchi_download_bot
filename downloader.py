@@ -60,7 +60,11 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
     if media_type == 'audio':
         ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio/best'
     else:
-        if 'instagram.com' in url or 'tiktok.com' in url:
+        direct_domains = [
+            'instagram.com', 'tiktok.com', 'twitter.com', 'x.com', 
+            'threads.net', 'facebook.com', 'fb.watch', 'pinterest.com', 'pin.it'
+        ]
+        if any(domain in url.lower() for domain in direct_domains):
             ydl_opts['format'] = 'best[ext=mp4]/best'
         elif quality:
             ydl_opts['merge_output_format'] = 'mp4'

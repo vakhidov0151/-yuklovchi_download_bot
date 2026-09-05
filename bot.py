@@ -814,8 +814,14 @@ async def handle_message(message: types.Message):
             
         text = text.strip()
         if text.startswith("http://") or text.startswith("https://"):
-            # 1. Instagram, TikTok va YouTube Shorts bo'lsa - DARHOL YUKLAB BERAMIZ!
-            is_direct = ('instagram.com' in text) or ('tiktok.com' in text) or ('/shorts/' in text)
+            # Instagram, TikTok, YouTube Shorts, X (Twitter), Threads, Facebook, Pinterest bo'lsa - DARHOL YUKLAB BERAMIZ!
+            direct_domains = [
+                'instagram.com', 'tiktok.com', '/shorts/', 
+                'twitter.com', 'x.com', 'threads.net', 
+                'facebook.com', 'fb.watch', 'pinterest.com', 'pin.it'
+            ]
+            is_direct = any(domain in text.lower() for domain in direct_domains)
+            
             if is_direct:
                 if not db.check_limit(message.from_user.id):
                     await message.answer(_(lang, 'limit_over'))
