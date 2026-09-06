@@ -54,6 +54,9 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
     elif os.path.exists('/app/data/cookies.txt'):
         ydl_opts['cookiefile'] = '/app/data/cookies.txt'
         
+    import shutil
+    has_ffmpeg = shutil.which('ffmpeg') is not None or os.path.exists('./ffmpeg.exe')
+    
     if os.path.exists('./ffmpeg.exe'):
         ydl_opts['ffmpeg_location'] = './ffmpeg.exe'
     
@@ -65,10 +68,14 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
             'threads.net', 'facebook.com', 'fb.watch', 'pinterest.com', 'pin.it'
         ]
         if any(domain in url.lower() for domain in direct_domains):
-            ydl_opts['format'] = 'bestvideo+bestaudio/best'
-            ydl_opts['merge_output_format'] = 'mp4'
+            if has_ffmpeg:
+                ydl_opts['format'] = 'bestvideo+bestaudio/best'
+                ydl_opts['merge_output_format'] = 'mp4'
+            else:
+                ydl_opts['format'] = 'best[ext=mp4]/best'
         elif quality:
-            ydl_opts['merge_output_format'] = 'mp4'
+            if has_ffmpeg:
+                ydl_opts['merge_output_format'] = 'mp4'
             ydl_opts['format_sort'] = ['vcodec:h264', 'acodec:m4a', 'res']
             ydl_opts['format'] = (
                 f'bestvideo[height<={quality}]+bestaudio/'
@@ -99,8 +106,7 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
             'quiet': True,
             'noplaylist': True,
             'socket_timeout': 60,
-            'format': 'bestvideo+bestaudio/best',
-            'merge_output_format': 'mp4',
+            'format': 'bestvideo+bestaudio/best' if has_ffmpeg else 'best',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android', 'ios', 'web']
@@ -108,6 +114,8 @@ def _download_media_sync(url: str, media_type: str = 'video', quality: str = Non
             },
             'http_headers': headers
         }
+        if has_ffmpeg:
+            fallback_opts['merge_output_format'] = 'mp4'
         if os.path.exists('cookies.txt'):
             fallback_opts['cookiefile'] = 'cookies.txt'
         elif os.path.exists('/app/data/cookies.txt'):
