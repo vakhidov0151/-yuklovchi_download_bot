@@ -81,7 +81,7 @@ async def chat_or_translate(text: str, lang: str = 'uz') -> str:
         
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.6-flash',
                 contents=text,
                 config={'system_instruction': sys_prompt}
             )
@@ -120,7 +120,7 @@ async def summarize_webpage(url: str, lang: str = 'uz') -> str:
         def _process():
             client = genai.Client(api_key=GEMINI_API_KEY)
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.6-flash',
                 contents=prompt
             )
             return response.text
