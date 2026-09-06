@@ -1,5 +1,5 @@
 aiogram>=3.17.0
-yt-dlp
+yt-dlp>=2024.8.6
 google-genai>=0.4.0
 python-dotenv>=1.0.0
 pillow>=11.0.0
