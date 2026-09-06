@@ -265,11 +265,20 @@ async def handle_photo(message: types.Message):
         downloaded_file = await bot.download_file(file_info.file_path)
         img = PIL.Image.open(io.BytesIO(downloaded_file.read()))
         
-        prompt = "Ushbu rasmdagi barcha yozuvlarni aniq va to'liq o'qib bering. Faqat rasmdagi tekstni o'zini bering. Agar rasmda jadval (table) bo'lsa, uni Excelga tushadigan qilib, qatorlarni yangi qator bilan, ustunlarni esa TAB (\\t) yoki '|' belgisi bilan ajratib yozing. Agar rasmda yozuv umuman bo'lmasa, nima tasvirlanganini qisqacha ta'riflab bering."
-        if lang == 'ru':
-            prompt = "Прочитайте весь текст на этом изображении точно и полностью. Верните только сам текст. Если на картинке есть таблица, отформатируйте ее для Excel: разделите столбцы знаком TAB или '|'. Если текста нет, кратко опишите, что изображено."
-        elif lang == 'en':
-            prompt = "Read all the text on this image accurately and completely. Return only the text itself. If there is a table in the image, format it for Excel by separating columns with a TAB or '|' character. If there is no text, briefly describe what is pictured."
+        user_caption = message.caption or ""
+        
+        if user_caption:
+            prompt = f"Foydalanuvchi ushbu rasm bo'yicha quyidagicha savol/izoh qoldirdi: '{user_caption}'. Rasmga qarab, shu savolga xuddi odamdek aqlli va to'liq javob bering."
+            if lang == 'ru':
+                prompt = f"Пользователь оставил следующий вопрос/комментарий к этому изображению: '{user_caption}'. Посмотрите на картинку и дайте умный, полный ответ."
+            elif lang == 'en':
+                prompt = f"The user left the following question/comment about this image: '{user_caption}'. Look at the picture and give a smart, complete answer."
+        else:
+            prompt = "Ushbu rasmdagi barcha yozuvlarni aniq va to'liq o'qib bering. Faqat rasmdagi tekstni o'zini bering. Agar rasmda jadval (table) bo'lsa, uni Excelga tushadigan qilib, qatorlarni yangi qator bilan, ustunlarni esa TAB (\\t) yoki '|' belgisi bilan ajratib yozing. Agar rasmda yozuv umuman bo'lmasa, nima tasvirlanganini qisqacha ta'riflab bering."
+            if lang == 'ru':
+                prompt = "Прочитайте весь текст на этом изображении точно и полностью. Верните только сам текст. Если на картинке есть таблица, отформатируйте ее для Excel: разделите столбцы знаком TAB или '|'. Если текста нет, кратко опишите, что изображено."
+            elif lang == 'en':
+                prompt = "Read all the text on this image accurately and completely. Return only the text itself. If there is a table in the image, format it for Excel by separating columns with a TAB or '|' character. If there is no text, briefly describe what is pictured."
             
         from google import genai
         from google.genai.errors import ServerError
@@ -314,6 +323,7 @@ async def handle_photo(message: types.Message):
         await wait_msg.edit_text(f"❌ Error: {str(e)}")
 
 import converter
+from ai_summary import summarize_media, chat_or_translate, summarize_webpage
 
 @dp.message(F.video | F.audio | F.voice)
 async def handle_media_summary(message: types.Message):
@@ -667,6 +677,56 @@ async def process_ai_summary_url(callback_query: types.CallbackQuery):
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
 
+from shazamio import Shazam
+
+@dp.callback_query(F.data.startswith("shazam_"))
+async def process_shazam(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    data = callback_query.data.split('_')
+    video_id = data[1]
+    cache_data = db.get_cache(video_id) or url_cache.get(video_id)
+    
+    if not cache_data:
+        await callback_query.answer("❌ Kesh topilmadi.", show_alert=True)
+        return
+        
+    url = cache_data['url']
+    await callback_query.answer()
+    
+    if callback_query.message.text:
+        wait_msg = await callback_query.message.edit_text("🎧 Qo'shiq qidirilmoqda... Kuting...")
+    else:
+        wait_msg = await callback_query.message.answer("🎧 Qo'shiq qidirilmoqda... Kuting...")
+        
+    try:
+        file_path, _ = await asyncio.wait_for(download_media(url, media_type='audio'), timeout=120.0)
+        
+        shazam = Shazam()
+        out = await shazam.recognize(file_path)
+        
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+        track = out.get('track')
+        if track:
+            title = track.get('title', "Noma'lum")
+            subtitle = track.get('subtitle', "Noma'lum artist")
+            coverart = track.get('images', {}).get('coverart')
+            link = track.get('url', '')
+            
+            reply_text = f"🎵 <b>{html.escape(title)}</b>\n👤 {html.escape(subtitle)}\n\n🎧 <a href='{link}'>Shazam</a>"
+            
+            if coverart:
+                await wait_msg.delete()
+                await callback_query.message.answer_photo(photo=coverart, caption=reply_text)
+            else:
+                await wait_msg.edit_text(reply_text)
+        else:
+            await wait_msg.edit_text("❌ Ushbu videodan hech qanday qo'shiq topilmadi.")
+            
+    except Exception as e:
+        await wait_msg.edit_text(f"❌ Xatolik: {str(e)}")
+
 @dp.callback_query(F.data.startswith("dl_"))
 async def process_download(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
@@ -865,11 +925,14 @@ async def handle_message(message: types.Message):
                     db.set_cache(video_id, c_item)
                     
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [
-                            InlineKeyboardButton(text="🎵 Musiqasi (Audio)", callback_data=f"dl_aud_{video_id}"),
-                            InlineKeyboardButton(text="🧠 AI Konspekt", callback_data=f"ai_sumurl_{video_id}")
-                        ]
-                    ])
+                [
+                    InlineKeyboardButton(text="🎵 Musiqasi (Audio)", callback_data=f"dl_aud_{video_id}"),
+                    InlineKeyboardButton(text="🧠 AI Konspekt", callback_data=f"ai_sumurl_{video_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="🎧 Qo'shiqni topish (Shazam)", callback_data=f"shazam_{video_id}")
+                ]
+            ])
                     
                     await message.answer_video(video=video, caption=f"🎬 <b>{html.escape(str(v_title)[:100])}</b>", reply_markup=keyboard)
                     await wait_msg.delete()
@@ -898,7 +961,10 @@ async def handle_message(message: types.Message):
                 return
                 
             if not info:
-                await wait_msg.edit_text(_(lang, 'not_found'))
+                # Agar video bo'lmasa, uni veb-sahifa deb o'ylab xulosa qilamiz
+                await wait_msg.edit_text("⏳ <i>Maqola o'qilmoqda... Kuting...</i>")
+                summary = await summarize_webpage(text, lang)
+                await wait_msg.edit_text(summary)
                 return
 
             title = info.get('title', 'Video')
@@ -915,7 +981,8 @@ async def handle_message(message: types.Message):
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text=_(lang, 'ai_summary_btn_audio'), callback_data=f"ai_sumurl_{video_id}")
+                    InlineKeyboardButton(text=_(lang, 'ai_summary_btn_audio'), callback_data=f"ai_sumurl_{video_id}"),
+                    InlineKeyboardButton(text="🎧 Qo'shiq (Shazam)", callback_data=f"shazam_{video_id}")
                 ],
                 [
                     InlineKeyboardButton(text="⬇️ 1080p", callback_data=f"dl_vid_{video_id}_1080"),
@@ -936,7 +1003,10 @@ async def handle_message(message: types.Message):
             
             await wait_msg.edit_text(_(lang, 'video_caption', title=title, ext=extractor, time=time_str), reply_markup=keyboard)
         else:
-             await message.answer(_(lang, 'send_only_link'))
+            # Agar oddiy matn bo'lsa (URL emas) -> Chat yoki Tarjima
+            wait_msg = await message.answer("⏳ <i>Yozilmoqda...</i>")
+            ai_reply = await chat_or_translate(text, lang)
+            await wait_msg.edit_text(ai_reply)
              
     except Exception as e:
         await message.answer(f"⚠️ Kritik xatolik yuz berdi:\n<code>{str(e)}</code>")
