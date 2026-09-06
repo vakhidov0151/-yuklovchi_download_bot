@@ -677,56 +677,6 @@ async def process_ai_summary_url(callback_query: types.CallbackQuery):
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
 
-from shazamio import Shazam
-
-@dp.callback_query(F.data.startswith("shazam_"))
-async def process_shazam(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    data = callback_query.data.split('_')
-    video_id = data[1]
-    cache_data = db.get_cache(video_id) or url_cache.get(video_id)
-    
-    if not cache_data:
-        await callback_query.answer("❌ Kesh topilmadi.", show_alert=True)
-        return
-        
-    url = cache_data['url']
-    await callback_query.answer()
-    
-    if callback_query.message.text:
-        wait_msg = await callback_query.message.edit_text("🎧 Qo'shiq qidirilmoqda... Kuting...")
-    else:
-        wait_msg = await callback_query.message.answer("🎧 Qo'shiq qidirilmoqda... Kuting...")
-        
-    try:
-        file_path, _ = await asyncio.wait_for(download_media(url, media_type='audio'), timeout=120.0)
-        
-        shazam = Shazam()
-        out = await shazam.recognize(file_path)
-        
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            
-        track = out.get('track')
-        if track:
-            title = track.get('title', "Noma'lum")
-            subtitle = track.get('subtitle', "Noma'lum artist")
-            coverart = track.get('images', {}).get('coverart')
-            link = track.get('url', '')
-            
-            reply_text = f"🎵 <b>{html.escape(title)}</b>\n👤 {html.escape(subtitle)}\n\n🎧 <a href='{link}'>Shazam</a>"
-            
-            if coverart:
-                await wait_msg.delete()
-                await callback_query.message.answer_photo(photo=coverart, caption=reply_text)
-            else:
-                await wait_msg.edit_text(reply_text)
-        else:
-            await wait_msg.edit_text("❌ Ushbu videodan hech qanday qo'shiq topilmadi.")
-            
-    except Exception as e:
-        await wait_msg.edit_text(f"❌ Xatolik: {str(e)}")
-
 @dp.callback_query(F.data.startswith("dl_"))
 async def process_download(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
@@ -928,9 +878,6 @@ async def handle_message(message: types.Message):
                 [
                     InlineKeyboardButton(text="🎵 Musiqasi (Audio)", callback_data=f"dl_aud_{video_id}"),
                     InlineKeyboardButton(text="🧠 AI Konspekt", callback_data=f"ai_sumurl_{video_id}")
-                ],
-                [
-                    InlineKeyboardButton(text="🎧 Qo'shiqni topish (Shazam)", callback_data=f"shazam_{video_id}")
                 ]
             ])
                     
@@ -981,8 +928,7 @@ async def handle_message(message: types.Message):
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text=_(lang, 'ai_summary_btn_audio'), callback_data=f"ai_sumurl_{video_id}"),
-                    InlineKeyboardButton(text="🎧 Qo'shiq (Shazam)", callback_data=f"shazam_{video_id}")
+                    InlineKeyboardButton(text=_(lang, 'ai_summary_btn_audio'), callback_data=f"ai_sumurl_{video_id}")
                 ],
                 [
                     InlineKeyboardButton(text="⬇️ 1080p", callback_data=f"dl_vid_{video_id}_1080"),
