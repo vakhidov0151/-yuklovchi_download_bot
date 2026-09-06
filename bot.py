@@ -5,7 +5,7 @@ import uuid
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.client.default import DefaultBotProperties
-from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, PreCheckoutQuery
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -188,13 +188,48 @@ async def cmd_freepro(message: types.Message):
 
 @dp.message(Command("vip"))
 async def cmd_vip(message: types.Message, state: FSMContext):
-    lang = db.get_language(message.from_user.id)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Karta orqali to'lov (Skrinshot)", callback_data="vip_card")],
+        [InlineKeyboardButton(text="⭐️ Telegram Stars (Avtomatik)", callback_data="vip_stars")],
+        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_vip")]
+    ])
+    await message.answer("💎 <b>VIP Tarif sotib olish</b>\n\nIltimos, to'lov usulini tanlang:", reply_markup=keyboard)
+
+@dp.callback_query(F.data == "vip_card")
+async def vip_card_selected(callback: types.CallbackQuery, state: FSMContext):
+    lang = db.get_language(callback.from_user.id)
     text = _(lang, 'vip_text', card=CARD_NUMBER, owner=CARD_OWNER)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_vip")]
     ])
-    await message.answer(text, reply_markup=keyboard)
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await state.set_state(UserStates.waiting_for_receipt)
+    await callback.answer()
+
+@dp.callback_query(F.data == "vip_stars")
+async def vip_stars_selected(callback: types.CallbackQuery):
+    await callback.message.delete()
+    prices = [LabeledPrice(label="VIP (30 kun)", amount=70)] # 70 Telegram Stars
+    await bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title="💎 VIP Tarif (30 kun)",
+        description="Botdan cheklovsiz foydalanish va barcha limitlarni olib tashlash imkoniyati.",
+        payload="vip_30_days",
+        provider_token="", # Telegram Stars uchun bo'sh bo'lishi shart
+        currency="XTR",
+        prices=prices
+    )
+    await callback.answer()
+
+@dp.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+@dp.message(F.successful_payment)
+async def successful_payment_handler(message: types.Message):
+    user_id = message.from_user.id
+    db.grant_pro(user_id, 30)
+    await message.answer("🎉 <b>Tabriklaymiz! To'lov muvaffaqiyatli amalga oshirildi.</b>\nSizga avtomatik ravishda 30 kunlik VIP (PRO) tarif yoqildi! 💎")
 
 @dp.callback_query(F.data == "cancel_vip")
 async def cancel_vip(callback: types.CallbackQuery, state: FSMContext):
