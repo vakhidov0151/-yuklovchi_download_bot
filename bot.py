@@ -225,7 +225,16 @@ async def process_receipt(message: types.Message, state: FSMContext):
     await message.answer("⏳ Chekingiz adminga yuborildi. Tez orada tekshirib tasdiqlanadi va PRO tarifingiz yoqiladi!")
 
 @dp.message(UserStates.waiting_for_receipt)
-async def process_receipt_invalid(message: types.Message):
+async def process_receipt_invalid(message: types.Message, state: FSMContext):
+    if message.text:
+        text = message.text.strip()
+        if text.startswith('/') or text.startswith('http'):
+            await state.clear()
+            await message.answer("To'lov jarayoni bekor qilindi.")
+            # Allow the message to be processed by other handlers
+            await handle_message(message)
+            return
+            
     await message.answer("Iltimos, to'lov skrinshotini (rasm) yuboring, yoki bekor qilish tugmasini bosing.")
 
 @dp.callback_query(F.data.startswith("approve_"))
